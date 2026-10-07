@@ -1,9 +1,24 @@
 #include <iostream>
 
+class Board {
+public:
+  Board() {};
+  ~Board() {};
+
+  void print_board() {
+    std::cout << " " << " | " << " " << " | " << " " << "\n";
+    std::cout << "---------\n";
+    std::cout << " " << " | " << " " << " | " << " " << "\n";
+    std::cout << "---------\n";
+    std::cout << " " << " | " << " " << " | " << " " << "\n";
+  };
+};
+
 class Game {
 public:
-  // Costructor
-  Game() {};
+  Board *board;
+  // Constructor
+  Game() { board = new Board(); };
 
   // Deconstructor
   ~Game() {};

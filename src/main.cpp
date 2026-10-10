@@ -6,22 +6,21 @@ public:
   Board() {};
   ~Board() {};
 
-  std::string to_string(uint16_t p1, uint16_t p2) {
-    std::string board_str = "";
-    board_str.reserve(9);
+  std::vector<std::string> to_string(uint16_t p1, uint16_t p2) {
+    std::vector<std::string> board_str;
     for (int i = 0; i < 9; i++) {
       if ((p1 & (1 << i)) != 0) {
-        board_str += "X";
+        board_str.emplace_back("\033[1;32mX\033[0m");
       } else if ((p2 & (1 << i)) != 0) {
-        board_str += "O";
+        board_str.emplace_back("\033[1;31mO\033[0m");
       } else {
-        board_str += std::to_string(i + 1);
+        board_str.emplace_back(std::to_string(i + 1));
       }
     }
     return board_str;
   };
 
-  void print_board(std::string b) {
+  void print_board(std::vector<std::string> b) {
     std::cout << "\n";
     std::cout << " " << b[0] << " | " << b[1] << " | " << b[2] << "\n";
     std::cout << "---|---|---\n";
@@ -31,12 +30,8 @@ public:
     std::cout << "\n";
   };
 
-  void play_move(uint16_t *p, int move, bool *turn) {
-    if (!is_valid_move(p, move)) {
-      return;
-    }
-
-    *p = (*p | (1 << (move - 1)));
+  void play_move(uint16_t *p1, uint16_t *p2, int move, bool *turn) {
+    *p1 = (*p1 | (1 << (move - 1)));
     *turn = !(*turn);
   };
 
@@ -60,9 +55,11 @@ public:
     return ((player_1 | player_2) & 0x1FF) == 0x1FF;
   };
 
-private:
-  bool is_valid_move(uint16_t *p, int move) {
-    return (*p & (1 << (move - 1))) == 0;
+  bool is_valid_move(uint16_t *p1, uint16_t *p2, int move) {
+    if (move < 1 || move > 9) {
+      return false;
+    }
+    return (*p1 & (1 << (move - 1))) == 0 && (*p2 & (1 << (move - 1))) == 0;
   };
 };
 
@@ -78,17 +75,16 @@ public:
     int winner = board->check_winner(player_1, player_2);
     if (winner == 0 && board->is_full(player_1, player_2)) {
       return 0;
-    } else {
+    } else if (winner != 0) {
       return winner;
     }
-
     if (is_maximising) {
       int best_score = INT_MIN;
       for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
           int offset_mask = (1 << (i * 3 + j));
           if (((player_1 | player_2) & offset_mask) == 0) {
-            player_1 &= offset_mask;
+            player_1 |= offset_mask;
             int score = minimax(board, false);
             player_1 ^= offset_mask;
             best_score = std::max(score, best_score);
@@ -102,7 +98,7 @@ public:
         for (int j = 0; j < 3; j++) {
           int offset_mask = (1 << (i * 3 + j));
           if (((player_1 | player_2) & offset_mask) == 0) {
-            player_2 &= offset_mask;
+            player_2 |= offset_mask;
             int score = minimax(board, true);
             player_2 ^= offset_mask;
             best_score = std::min(score, best_score);
@@ -121,10 +117,12 @@ public:
       for (int j = 0; j < 3; j++) {
         uint16_t offset_mask = (1 << (i * 3 + j));
         if (((player_1 | player_2) & offset_mask) == 0) {
+          player_2 |= offset_mask;
           int score = minimax(board, true);
+          player_2 ^= offset_mask;
+
           if (score < best_score) {
             best_score = score;
-            std::cout << "Score: " << best_score << score << "\n";
             best_move = (i * 3 + j);
           }
         }
@@ -153,13 +151,17 @@ public:
   ~Game() {};
 
   void start_game() {
-    int num;
+    int move;
     board->print_board(board->to_string(player_1, player_2));
     std::cout << "Enter: ";
-    while (std::cin >> num) {
-      if (is_player1_turn) {
-        board->play_move(&player_1, num, &is_player1_turn);
+    while (std::cin >> move) {
+      if (!board->is_valid_move(&player_1, &player_2, move)) {
+        std::cout << "Enter: ";
+        continue;
+      } else if (is_player1_turn) {
+        board->play_move(&player_1, &player_2, move, &is_player1_turn);
       }
+
       engine->engine_move(board);
       is_player1_turn = !is_player1_turn;
 
@@ -176,7 +178,6 @@ public:
         std::cout << "Draw!\n";
         return;
       }
-
       std::cout << "Enter: ";
     }
   };

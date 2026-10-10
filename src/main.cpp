@@ -1,4 +1,5 @@
 #include <iostream>
+#include <random>
 #include <string>
 
 class Board {
@@ -31,7 +32,7 @@ public:
   };
 
   void play_move(uint16_t *p1, uint16_t *p2, int move, bool *turn) {
-    *p1 = (*p1 | (1 << (move - 1)));
+    *p2 = (*p2 | (1 << (move - 1)));
     *turn = !(*turn);
   };
 
@@ -110,18 +111,17 @@ public:
   };
 
   void engine_move(Board *board) {
-    int best_score = INT_MAX;
+    int best_score = INT_MIN;
     int best_move = -1;
 
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
         uint16_t offset_mask = (1 << (i * 3 + j));
         if (((player_1 | player_2) & offset_mask) == 0) {
-          player_2 |= offset_mask;
-          int score = minimax(board, true);
-          player_2 ^= offset_mask;
-
-          if (score < best_score) {
+          player_1 |= offset_mask;
+          int score = minimax(board, false);
+          player_1 ^= offset_mask;
+          if (score > best_score) {
             best_score = score;
             best_move = (i * 3 + j);
           }
@@ -129,7 +129,7 @@ public:
       }
     }
 
-    player_2 |= (1 << best_move);
+    player_1 |= (1 << best_move);
   };
 };
 
@@ -141,6 +141,7 @@ public:
 
   Board *board;
   Engine *engine;
+
   // Constructor
   Game() {
     board = new Board();
@@ -150,42 +151,68 @@ public:
   // Deconstructor
   ~Game() {};
 
-  void start_game() {
-    int move;
+  int start_game() {
+    int choices[] = {3};
+    size_t num_choices = sizeof(choices) / sizeof(choices[0]);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<size_t> dist(0, num_choices - 1);
+
+    int move = choices[dist(gen)];
+    player_1 |= (1 << (move - 1));
+    is_player1_turn = !is_player1_turn;
+
     board->print_board(board->to_string(player_1, player_2));
     std::cout << "Enter: ";
     while (std::cin >> move) {
       if (!board->is_valid_move(&player_1, &player_2, move)) {
         std::cout << "Enter: ";
         continue;
-      } else if (is_player1_turn) {
+      } else if (!is_player1_turn) {
         board->play_move(&player_1, &player_2, move, &is_player1_turn);
       }
 
       engine->engine_move(board);
       is_player1_turn = !is_player1_turn;
-
       board->print_board(board->to_string(player_1, player_2));
 
       char winner = board->check_winner(player_1, player_2);
       if (winner == 1) {
         std::cout << "\nPlayer 1 Won!\n";
-        return;
+        return 1;
       } else if (winner == -1) {
         std::cout << "\nPlayer 2 Won!\n";
-        return;
+        return -1;
       } else if (board->is_full(player_1, player_2)) {
         std::cout << "Draw!\n";
-        return;
+        return 0;
       }
       std::cout << "Enter: ";
-    }
-  };
+    };
+
+    return 0;
+  }
 };
 
 int main() {
-  Game *game = new Game();
-  game->start_game();
+  int player_1_score = 0;
+  int player_2_score = 0;
+
+  while (true) {
+    Game *game = new Game();
+    int res = game->start_game();
+    if (res == 1) {
+      player_1_score++;
+    } else if (res == -1) {
+      player_2_score++;
+    }
+
+    std::cout << "\n#################################################\n";
+    std::cout << "############# PLAYER 1: " << player_1_score
+              << " PLAYER 2: " << player_2_score << " ###########\n";
+    std::cout << "#################################################\n";
+  }
 
   return 0;
 };

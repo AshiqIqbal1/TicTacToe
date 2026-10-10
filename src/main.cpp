@@ -47,14 +47,18 @@ public:
            ((*p & 0x111) == 0x111) || ((*p & 0x54) == 0x54);
   }
 
-  int check_winner(uint16_t *player_1, uint16_t *player_2) {
-    if (did_player_win(player_1)) {
+  int check_winner(uint16_t &player_1, uint16_t &player_2) {
+    if (did_player_win(&player_1)) {
       return 1;
-    } else if (did_player_win(player_2)) {
+    } else if (did_player_win(&player_2)) {
       return -1;
     }
     return 0;
   }
+
+  bool is_full(uint16_t &player_1, uint16_t &player_2) {
+    return ((player_1 | player_2) & 0x1FF) == 0x1FF;
+  };
 
 private:
   bool is_valid_move(uint16_t *p, int move) {
@@ -64,49 +68,43 @@ private:
 
 class Engine {
 public:
-  uint16_t *player_1;
-  uint16_t *player_2;
+  uint16_t &player_1;
+  uint16_t &player_2;
 
-  Engine(uint16_t *player_1, uint16_t *player_2) {
-    player_1 = player_1;
-    player_2 = player_2;
-  };
-
+  Engine(uint16_t &p1, uint16_t &p2) : player_1(p1), player_2(p2) {}
   ~Engine();
-
-  bool is_full() { return (*player_1 | *player_2) & 0x1FF; };
 
   int minimax(Board *board, bool is_maximising) {
     int winner = board->check_winner(player_1, player_2);
-    if (winner == 0) {
-      return is_full();
+    if (winner == 0 && board->is_full(player_1, player_2)) {
+      return 0;
     } else {
       return winner;
     }
 
     if (is_maximising) {
-      int best_score = INT_MAX;
+      int best_score = INT_MIN;
       for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
           int offset_mask = (1 << (i * 3 + j));
-          if (((*player_1 | *player_2) & offset_mask) == 0) {
-            *player_1 &= offset_mask;
+          if (((player_1 | player_2) & offset_mask) == 0) {
+            player_1 &= offset_mask;
             int score = minimax(board, false);
-            *player_1 ^= offset_mask;
+            player_1 ^= offset_mask;
             best_score = std::max(score, best_score);
           }
         }
       }
       return best_score;
     } else {
-      int best_score = INT_MIN;
+      int best_score = INT_MAX;
       for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
           int offset_mask = (1 << (i * 3 + j));
-          if (((*player_1 | *player_2) & offset_mask) == 0) {
-            *player_2 &= offset_mask;
+          if (((player_1 | player_2) & offset_mask) == 0) {
+            player_2 &= offset_mask;
             int score = minimax(board, true);
-            *player_2 ^= offset_mask;
+            player_2 ^= offset_mask;
             best_score = std::min(score, best_score);
           }
         }
@@ -115,56 +113,78 @@ public:
     }
   };
 
-  void engine_move() {};
+  void engine_move(Board *board) {
+    int best_score = INT_MAX;
+    int best_move = -1;
 
-  class Game {
-  public:
-    uint16_t player_1 = 0;
-    uint16_t player_2 = 0;
-    bool is_player1_turn = true;
-
-    Board *board;
-    Engine *engine;
-    // Constructor
-    Game() {
-      board = new Board();
-      engine = new Engine(&player_1, &player_2);
-    };
-
-    // Deconstructor
-    ~Game() {};
-
-    void start_game() {
-      int num;
-
-      board->print_board(board->to_string(player_1, player_2));
-      std::cout << "Enter: ";
-      while (std::cin >> num) {
-        if (is_player1_turn) {
-          board->play_move(&player_1, num, &is_player1_turn);
-        } else {
-          board->play_move(&player_2, num, &is_player1_turn);
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        uint16_t offset_mask = (1 << (i * 3 + j));
+        if (((player_1 | player_2) & offset_mask) == 0) {
+          int score = minimax(board, true);
+          if (score < best_score) {
+            best_score = score;
+            std::cout << "Score: " << best_score << score << "\n";
+            best_move = (i * 3 + j);
+          }
         }
-
-        board->print_board(board->to_string(player_1, player_2));
-
-        char winner = board->check_winner(&player_1, &player_2);
-        if (winner == 1) {
-          std::cout << "\nPlayer 1 Won!\n";
-          return;
-        } else if (winner == -1) {
-          std::cout << "\nPlayer 2 Won!\n";
-          return;
-        }
-
-        std::cout << "Enter: ";
       }
-    };
+    }
+
+    player_2 |= (1 << best_move);
+  };
+};
+
+class Game {
+public:
+  uint16_t player_1 = 0;
+  uint16_t player_2 = 0;
+  bool is_player1_turn = true;
+
+  Board *board;
+  Engine *engine;
+  // Constructor
+  Game() {
+    board = new Board();
+    engine = new Engine(player_1, player_2);
   };
 
-  int main() {
-    Game *game = new Game();
-    game->start_game();
+  // Deconstructor
+  ~Game() {};
 
-    return 0;
-  }
+  void start_game() {
+    int num;
+    board->print_board(board->to_string(player_1, player_2));
+    std::cout << "Enter: ";
+    while (std::cin >> num) {
+      if (is_player1_turn) {
+        board->play_move(&player_1, num, &is_player1_turn);
+      }
+      engine->engine_move(board);
+      is_player1_turn = !is_player1_turn;
+
+      board->print_board(board->to_string(player_1, player_2));
+
+      char winner = board->check_winner(player_1, player_2);
+      if (winner == 1) {
+        std::cout << "\nPlayer 1 Won!\n";
+        return;
+      } else if (winner == -1) {
+        std::cout << "\nPlayer 2 Won!\n";
+        return;
+      } else if (board->is_full(player_1, player_2)) {
+        std::cout << "Draw!\n";
+        return;
+      }
+
+      std::cout << "Enter: ";
+    }
+  };
+};
+
+int main() {
+  Game *game = new Game();
+  game->start_game();
+
+  return 0;
+};
